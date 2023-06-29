@@ -13,17 +13,15 @@ void keyboard_pre_init_user(void) {
 #endif
 }
 
-static painter_device_t oled;
+static painter_device_t tft;
 static painter_image_handle_t car_image;
 
 void keyboard_post_init_user(void) {
-    oled = qp_st7735_make_spi_device(128, 128, OLED_CS_PIN, OLED_DC_PIN, OLED_RST_PIN, 8, 0);
-    qp_init(oled, QP_ROTATION_0);
-    qp_rect(oled, 0, 0, 127, 127, 0, 0, 0, true);
-    qp_flush(oled);
+    tft = qp_st7789_make_spi_device(128, 128, TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN, 8, 0);
+    qp_init(tft, QP_ROTATION_0);
 
     car_image = qp_load_image_mem(gfx_car);
     if (car_image != NULL) {
-        qp_drawimage(oled, 128, 128, car_image);
+        qp_drawimage(tft, 128, 128, car_image);
     }
 }

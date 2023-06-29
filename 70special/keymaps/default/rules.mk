@@ -1,1 +1,1 @@
-SRC += images/car.qgf.c
+SRC += ./images/car.qgf.c

@@ -16,9 +16,6 @@
         "cols": ["GP2"],
         "rows": ["GP3"]
     },
-    "build": {
-        "lto": true
-    },
     "debounce": 20,
     "layouts": {
         "LAYOUT_65_all": {

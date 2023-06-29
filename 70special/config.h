@@ -8,6 +8,6 @@
 #define SPI_SCK_PIN GP18
 #define SPI_MOSI_PIN GP19
 
-#define OLED_CS_PIN GP3
-#define OLED_DC_PIN GP4
-#define OLED_RST_PIN GP5
+#define TFT_CS_PIN GP3
+#define TFT_DC_PIN GP4
+#define TFT_RST_PIN GP5
