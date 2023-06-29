@@ -1,0 +1,30 @@
+{
+    "keyboard_name": "Miguelio 70 Special",
+    "manufacturer": "Miguelio",
+    "url": "https://miguelio.com",
+    "maintainer": "miguelio",
+    "tags": ["70%", "Special"],
+    "usb": {
+        "vid": "0x4D47",
+        "pid": "0x0070",
+        "device_version": "1.0.0"
+    },
+    "processor": "RP2040",
+    "bootloader": "rp2040",
+    "diode_direction": "COL2ROW",
+    "matrix_pins": {
+        "cols": ["GP2"],
+        "rows": ["GP3"]
+    },
+    "build": {
+        "lto": true
+    },
+    "debounce": 20,
+    "layouts": {
+        "LAYOUT_65_all": {
+            "layout": [
+                { "matrix": [0, 0], "label":"A", "x":0, "y":0 }
+            ]
+        }
+    }
+}
