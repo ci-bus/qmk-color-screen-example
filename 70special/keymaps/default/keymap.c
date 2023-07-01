@@ -1,12 +1,118 @@
 #include QMK_KEYBOARD_H
 #include "qp.h"
+#include "wait.h"
 
-#include "./images/car.qgf.c"
+#include "./images/tetris.qgf.c"
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {[0] = LAYOUT_65_all(KC_A), [1] = LAYOUT_65_all(KC_B)};
 
-static painter_device_t tft;
-static painter_image_handle_t car_image;
+static painter_device_t       tft;
+
+#define IMAGE_WIDTH 128
+#define IMAGE_HEIGHT 128
+
+static uint16_t pixelBuffer[IMAGE_WIDTH * IMAGE_HEIGHT];
+
+static uint16_t cuboBlueBuffer[6 * 6] = {
+  0xF800, 0xF800, 0xF800, 0xF800, 0xF800, 0x8000,
+  0xF800, 0xF800, 0xF800, 0xF800, 0xF800, 0x8000,
+  0xF800, 0xF800, 0xF800, 0xF800, 0xF800, 0x8000,
+  0xF800, 0xF800, 0xF800, 0xF800, 0xF800, 0x8000,
+  0xF800, 0xF800, 0xF800, 0xF800, 0xF800, 0x8000,
+  0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000
+};
+
+static uint16_t cuboGreenBuffer[6 * 6] = {
+  0x001F, 0x001F, 0x001F, 0x001F, 0x001F, 0x0010,
+  0x001F, 0x001F, 0x001F, 0x001F, 0x001F, 0x0010,
+  0x001F, 0x001F, 0x001F, 0x001F, 0x001F, 0x0010,
+  0x001F, 0x001F, 0x001F, 0x001F, 0x001F, 0x0010,
+  0x001F, 0x001F, 0x001F, 0x001F, 0x001F, 0x0010,
+  0x0010, 0x0010, 0x0010, 0x0010, 0x0010, 0x0010
+};
+
+static uint16_t cuboRedBuffer[6 * 6] = {
+  0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x0400,
+  0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x0400,
+  0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x0400,
+  0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x0400,
+  0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x07E0, 0x0400,
+  0x0400, 0x0400, 0x0400, 0x0400, 0x0400, 0x0400
+};
+
+static uint16_t cuboCyanBuffer[6 * 6] = {
+  0xF81F, 0xF81F, 0xF81F, 0xF81F, 0xF81F, 0x8010,
+  0xF81F, 0xF81F, 0xF81F, 0xF81F, 0xF81F, 0x8010,
+  0xF81F, 0xF81F, 0xF81F, 0xF81F, 0xF81F, 0x8010,
+  0xF81F, 0xF81F, 0xF81F, 0xF81F, 0xF81F, 0x8010,
+  0xF81F, 0xF81F, 0xF81F, 0xF81F, 0xF81F, 0x8010,
+  0x8010, 0x8010, 0x8010, 0x8010, 0x8010, 0x8010
+};
+
+static uint16_t cuboYellowBuffer[6 * 6] = {
+  0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x0430,
+  0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x0430,
+  0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x0430,
+  0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x0430,
+  0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x0430,
+  0x0430, 0x0430, 0x0430, 0x0430, 0x0430, 0x0430
+};
+
+static uint16_t cuboPurpleBuffer[6 * 6] = {
+  0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0x0400,
+  0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0x0400,
+  0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0x0400,
+  0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0x0400,
+  0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0xFFE0, 0x0400,
+  0x0400, 0x0400, 0x0400, 0x0400, 0x0400, 0x0400
+};
+
+
+
+uint16_t cc(uint8_t red, uint8_t green, uint8_t blue) {
+    // Calcular los valores desplazados de los componentes de color
+    uint16_t blue565  = blue * 2048;
+    uint16_t red565   = red * 32;
+    uint16_t green565 = green;
+    // Combinar los componentes de color en un solo valor RGB565
+    uint16_t color565 = (blue565 & 0xF800) | (red565 & 0x03E0) | (green565 & 0x001F);
+    return color565;
+}
+
+void clear_screen(void) {
+    for (uint8_t y = 0; y < IMAGE_HEIGHT; y++) {
+        for (uint8_t x = 0; x < IMAGE_WIDTH; x++) {
+            pixelBuffer[y * IMAGE_WIDTH + x] = 0x0000;
+        }
+    }
+}
+
+void embed_part(uint16_t* part, uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
+    for (uint8_t y2 = 0; y2 < h; y2++) {
+        for (uint8_t x2 = 0; x2 < w; x2++) {
+            pixelBuffer[(y2 + y) * IMAGE_WIDTH + (x2 + x)] = part[y2 * w + x2];
+        }
+    }
+}
+
+void game_engine(void) {
+    
+
+    for (uint8_t i = 0; i < IMAGE_HEIGHT - 6; i += 6) {
+      clear_screen();
+      embed_part(cuboRedBuffer, 0, i, 6, 6);
+      embed_part(cuboGreenBuffer, 6, i, 6, 6);
+      embed_part(cuboBlueBuffer, 12, i, 6, 6);
+      embed_part(cuboYellowBuffer, 18, i, 6, 6);
+      embed_part(cuboCyanBuffer, 24, i, 6, 6);
+      embed_part(cuboPurpleBuffer, 30, i, 6, 6);
+      qp_pixdata(tft, pixelBuffer, (IMAGE_WIDTH * IMAGE_HEIGHT));
+      wait_ms(200);
+    }
+
+    game_engine();
+    
+}
 
 void keyboard_post_init_user(void) {
     tft = qp_st7735_make_spi_device(128, 128, TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN, 4, 0);
@@ -17,8 +123,15 @@ void keyboard_post_init_user(void) {
     qp_rect(tft, 0, 0, 127, 127, 0, 0, 0, true);
     qp_flush(tft);
 
-    car_image = qp_load_image_mem(gfx_car);
-    if (car_image != NULL) {
-        qp_drawimage(tft, 0, 0, car_image);
+    painter_image_handle_t tetris_image = qp_load_image_mem(gfx_tetris);
+    if (tetris_image != NULL) {
+       qp_drawimage(tft, 0, 0, tetris_image);
     }
+
+    wait_ms(3000);
+
+    qp_rect(tft, 0, 0, 127, 127, 0, 0, 0, true);
+    qp_flush(tft);
+
+    game_engine();
 }
