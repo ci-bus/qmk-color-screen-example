@@ -28,11 +28,10 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {[0] = LAYOUT_65_al
 static painter_device_t      display;
 static uint16_t              pixelBuffer[IMAGE_WIDTH * IMAGE_HEIGHT];
 static painter_font_handle_t font;
-static bool                  playing;
-static uint16_t              timeNextMove = 300;
-static uint32_t              waitTimeStart;
-static uint32_t              waitTimeEnd;
-static int                   points = 1;
+static uint32_t              timeNextMove = 300;
+static int                   nextCicle    = 0;
+static bool                  playing      = false;
+static int                   points       = 0;
 
 /*
 Playing tetromino
@@ -40,19 +39,18 @@ Playing tetromino
 1 Box (color)
 2 Position x
 3 Position y
+4 tetromino
 */
-static int       playerTetromino[4] = {0, 0, 0, 0};
-static Tetromino playerTetrominoPiece;
-static int       nextTetromino[4] = {0, 0, 0, 0};
-static Tetromino nextTetrominoPiece;
-static int       markDownTetromino;
+static int playerTetromino[5] = {0, 0, 0, 0, 0};
+static int nextTetromino[5]   = {0, 0, 0, 0, 0};
+static int markDownTetromino;
 
 /*
 Tetrominos statuses
 0 Used
 1 Box (color)
 */
-static uint8_t playerBoxes[H_BOXES][V_BOXES][2];
+static uint8_t boardBoxes[H_BOXES][V_BOXES][2];
 
 // Control key pressed
 static bool pressed_keys[8] = {
@@ -67,17 +65,11 @@ static bool pressed_keys[8] = {
 };
 
 void reset_time(uint16_t time) {
-    waitTimeStart = timer_read();
-    waitTimeEnd   = (waitTimeStart + time) % UINT16_MAX;
+    nextCicle = timer_read32() + time;
 }
 
 bool check_time(void) {
-    uint16_t time = timer_read();
-    if (waitTimeEnd > waitTimeStart) {
-        return (time > waitTimeEnd || time < waitTimeStart);
-    } else {
-        return (time > waitTimeEnd && time < waitTimeStart);
-    }
+    return (timer_read32() > nextCicle);
 }
 
 void clear_screen(uint8_t width) {
@@ -91,8 +83,8 @@ void clear_screen(uint8_t width) {
 void clear_boxes(void) {
     for (uint8_t y = 0; y < V_BOXES; y++) {
         for (uint8_t x = 0; x < H_BOXES; x++) {
-            playerBoxes[x][y][0] = 0;
-            playerBoxes[x][y][1] = 0;
+            boardBoxes[x][y][0] = 0;
+            boardBoxes[x][y][1] = 0;
         }
     }
 }
@@ -150,56 +142,38 @@ void embed_part(const uint16_t *part, uint8_t x, uint8_t y, uint8_t w, uint8_t h
     }
 }
 
-void add_next_tetromino(void) {
+void set_next_tetromino(void) {
     // Random values
     uint8_t colorRandom     = rand() % 6;
-    uint8_t tetrominoRandom = rand() % 7;
-    uint8_t rotateRandom    = rand() % 4;
-    uint8_t x               = 14;
-    uint8_t y               = 4;
-    // Get tetromino
-    Tetromino piece         = tetrominos[tetrominoRandom];
-    uint8_t   tetrominoSize = sqrt(piece.length);
-    // Clone tetromino
-    if (nextTetrominoPiece.data) {
-        free(nextTetrominoPiece.data);
+    uint8_t tetrominoRandom = rand() % 5;
+    while (nextTetromino[0] == tetrominoRandom) {
+        tetrominoRandom = rand() % 5;
     }
-    uint8_t size  = piece.length * sizeof(bool);
-    bool   *clone = malloc(size);
-    memcpy(clone, piece.data, size);
+    uint8_t rotateRandom = rand() % 4;
+    uint8_t x            = 14;
+    uint8_t y            = 4;
+    // Get tetromino
+    Tetromino piece = tetrominos[tetrominoRandom];
     // Rotate tetromino
-    if (rotateRandom > 0) {
+    if (rotateRandom) {
         for (uint8_t r = 0; r < rotateRandom; r++) {
-            rotate_array(clone, tetrominoSize, true);
+            rotate_array(piece.data, piece.size, true);
         }
     }
     // Store values
-    nextTetrominoPiece.length = piece.length;    // Tetromino length
-    nextTetrominoPiece.data   = clone;           // Tetromino data
-    nextTetromino[0]          = tetrominoRandom; // Tipe
-    nextTetromino[1]          = colorRandom;     // Color
-    nextTetromino[2]          = x;               // x
-    nextTetromino[3]          = y;               // y
+    nextTetromino[0] = tetrominoRandom; // Tipe
+    nextTetromino[1] = colorRandom;     // Color
+    nextTetromino[2] = x;               // x
+    nextTetromino[3] = y;               // y
 }
 
-void add_player_tetromino(void) {
-    // Get next tetromino
-    Tetromino piece         = nextTetrominoPiece;
-    uint8_t   tetrominoSize = sqrt(piece.length);
-    // Clone tetromino
-    if (playerTetrominoPiece.data) {
-        free(playerTetrominoPiece.data);
-    }
-    uint8_t size  = piece.length * sizeof(bool);
-    bool   *clone = malloc(size);
-    memcpy(clone, piece.data, size);
-    // Store values
-    playerTetrominoPiece.length = piece.length;
-    playerTetrominoPiece.data   = clone;
-    playerTetromino[0]          = nextTetromino[0];       // Tipe
-    playerTetromino[1]          = nextTetromino[1];       // Color
-    playerTetromino[2]          = 3;                      // x
-    playerTetromino[3]          = tetrominoSize * -1 - 1; // y
+void set_player_tetromino(void) {
+    // Get tetromino
+    Tetromino piece    = tetrominos[nextTetromino[0]];
+    playerTetromino[0] = nextTetromino[0];    // Tipe
+    playerTetromino[1] = nextTetromino[1];    // Color
+    playerTetromino[2] = 3;                   // x
+    playerTetromino[3] = piece.size * -1 - 1; // y
 }
 
 bool check_movement(uint8_t tetrominoSize, bool *data, int offsetX, int offsetY) {
@@ -210,7 +184,7 @@ bool check_movement(uint8_t tetrominoSize, bool *data, int offsetX, int offsetY)
                 int yTemp = playerTetromino[3] + y + offsetY;
                 if (xTemp < 0 || xTemp >= H_BOXES || yTemp >= V_BOXES) { // Limits
                     return false;
-                } else if (yTemp >= 0 && playerBoxes[xTemp][yTemp][0] == 1) { // Hit box
+                } else if (yTemp >= 0 && boardBoxes[xTemp][yTemp][0] == 1) { // Hit box
                     return false;
                 }
             }
@@ -245,7 +219,7 @@ CheckRotationResults check_rotation(uint8_t tetrominoSize, bool *data) {
             if (data[y * tetrominoSize + x] == 1) {
                 int xTemp = playerTetromino[2] + x + results.offsetX;
                 int yTemp = playerTetromino[3] + y;
-                if (yTemp >= 0 && playerBoxes[xTemp][yTemp][0] == 1) {
+                if (yTemp >= 0 && boardBoxes[xTemp][yTemp][0] == 1) {
                     results.ok = false;
                 }
             }
@@ -260,9 +234,9 @@ void create_static_boxes(uint8_t tetrominoSize, bool *data, uint8_t boxColor) {
             if (data[y * tetrominoSize + x]) {
                 int xTemp = playerTetromino[2] + x;
                 int yTemp = playerTetromino[3] + y;
-                if (yTemp >= 0) {
-                    playerBoxes[xTemp][yTemp][0] = 1;
-                    playerBoxes[xTemp][yTemp][1] = boxColor;
+                if (yTemp >= 0 && yTemp < V_BOXES) {
+                    boardBoxes[xTemp][yTemp][0] = 1;
+                    boardBoxes[xTemp][yTemp][1] = boxColor;
                 }
             }
         }
@@ -272,8 +246,8 @@ void create_static_boxes(uint8_t tetrominoSize, bool *data, uint8_t boxColor) {
 void draw_static_boxes(void) {
     for (uint8_t y = 0; y < V_BOXES; y++) {
         for (uint8_t x = 0; x < H_BOXES; x++) {
-            if (playerBoxes[x][y][0] == 1) {
-                embed_part(boxes[playerBoxes[x][y][1]], x * BOX_SIZE, y * BOX_SIZE, BOX_SIZE, BOX_SIZE);
+            if (boardBoxes[x][y][0] == 1) {
+                embed_part(boxes[boardBoxes[x][y][1]], x * BOX_SIZE, y * BOX_SIZE, BOX_SIZE, BOX_SIZE);
             }
         }
     }
@@ -285,10 +259,10 @@ void delete_complete_lines(void) {
         bool paint  = false;
         for (uint8_t x = 0; x < H_BOXES; x++) {
             // Check if box is missing
-            if (playerBoxes[x][y][0] == 0) { // Missing box
+            if (boardBoxes[x][y][0] == 0) { // Missing box
                 delete = false;
             }
-            if (playerBoxes[x][y][1] != 6) { // No gray color
+            if (boardBoxes[x][y][1] != 6) { // No gray color
                 paint = true;
             }
         }
@@ -297,16 +271,18 @@ void delete_complete_lines(void) {
                 // paint the lines
                 for (uint8_t x = 0; x < H_BOXES; x++) {
                     // Gray color
-                    playerBoxes[x][y][1] = 6;
+                    boardBoxes[x][y][1] = 6;
                     // Sum point
                     points++;
+                    // Speed up
+                    timeNextMove--;
                 }
             } else {
                 // lower the lines
                 for (uint8_t y2 = y; y2 > 0; y2--) {
                     for (uint8_t x = 0; x < H_BOXES; x++) {
-                        playerBoxes[x][y2][0] = playerBoxes[x][y2 - 1][0];
-                        playerBoxes[x][y2][1] = playerBoxes[x][y2 - 1][1];
+                        boardBoxes[x][y2][0] = boardBoxes[x][y2 - 1][0];
+                        boardBoxes[x][y2][1] = boardBoxes[x][y2 - 1][1];
                     }
                 }
                 // Check again the some line
@@ -316,9 +292,38 @@ void delete_complete_lines(void) {
     }
 }
 
+void start_game(void) {
+    clear_screen(IMAGE_WIDTH);
+    clear_boxes();
+    set_next_tetromino();
+    set_player_tetromino();
+    set_next_tetromino();
+    reset_time(timeNextMove);
+    timeNextMove = 300;
+    points = 0;
+    playing = true;
+}
+
+void init_game(void) {
+    qp_rect(display, 0, 0, 127, 127, 0, 0, 0, true);
+    qp_flush(display);
+
+    painter_image_handle_t tetris_image = qp_load_image_mem(gfx_tetris);
+    if (tetris_image != NULL) {
+        qp_drawimage(display, 0, 0, tetris_image);
+    }
+    wait_ms(3000);
+    qp_close_image(tetris_image);
+
+    qp_rect(display, 0, 0, 127, 127, 0, 0, 0, true);
+    qp_flush(display);
+
+    font = qp_load_font_mem(font_freeroad_11);
+
+    start_game();
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-    // Run rand to energize the game
-    rand();
     // Control pressed keys
     switch (keycode) {
         case KC_A:
@@ -329,6 +334,11 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             break;
         case KC_C:
             pressed_keys[2] = record->event.pressed;
+            if (!playing) {
+                qp_rect(display, 0, 0, 127, 127, 0, 0, 0, true);
+                qp_flush(display);
+                start_game();
+            }
             break;
         case KC_D:
             pressed_keys[3] = record->event.pressed;
@@ -382,14 +392,15 @@ void matrix_scan_user(void) {
         // Clear all
         clear_screen(H_BOXES * BOX_SIZE + 1);
 
-        //---------------//
+        //-------------//
         // Draw player //
-        //---------------//
+        //-------------//
 
-        uint8_t playerTetrominoSize = sqrt(playerTetrominoPiece.length);
+        // Player tetromino
+        Tetromino playerPiece = tetrominos[playerTetromino[0]];
 
         // Controls
-        control_actions(playerTetrominoSize, playerTetrominoPiece.data);
+        control_actions(playerPiece.size, tetrominos[playerTetromino[0]].data);
 
         // Check time next movement
         if (check_time()) {
@@ -398,32 +409,35 @@ void matrix_scan_user(void) {
             // Delete complete line
             delete_complete_lines();
             // If it can move
-            if (check_movement(playerTetrominoSize, playerTetrominoPiece.data, 0, 1)) {
+            Tetromino playerPiece = tetrominos[playerTetromino[0]];
+            if (check_movement(playerPiece.size, playerPiece.data, 0, 1)) {
                 // Move tetromino
                 playerTetromino[3]++;
                 // Reset time next movement
                 if (pressed_keys[3]) { // If key down is pressed
-                    reset_time(timeNextMove / 10);
+                    reset_time((int)(timeNextMove / 10));
                 } else {
                     reset_time(timeNextMove);
                 }
             } else { // Else finish movement
                 // Create static single boxes
-                create_static_boxes(playerTetrominoSize, playerTetrominoPiece.data, playerTetromino[1]);
+                create_static_boxes(playerPiece.size, playerPiece.data, playerTetromino[1]);
                 // GAME OVER
                 if (playerTetromino[3] < 0) {
                     clear_screen(IMAGE_WIDTH);
                     qp_pixdata(display, pixelBuffer, (IMAGE_WIDTH * IMAGE_HEIGHT));
-                    qp_drawtext(display, 10, 10, font, "GAME OVER");
+                    qp_drawtext(display, 5, 10, font, "GAME OVER");
                     char pointsText[20];
                     snprintf(pointsText, sizeof(pointsText), "Points: %u", points);
-                    qp_drawtext(display, 10, 30, font, pointsText);
+                    qp_drawtext(display, 5, 30, font, pointsText);
+                    wait_ms(3000);
+                    qp_drawtext(display, 5, 50, font, "Press rotate to try again!");
                     playing = false;
                 } else {
                     // Parse next to player tetromino
-                    add_player_tetromino();
+                    set_player_tetromino();
                     // Add next tetromino
-                    add_next_tetromino();
+                    set_next_tetromino();
                     // Delete complete line
                     delete_complete_lines();
                     // Reset time next movement
@@ -436,18 +450,20 @@ void matrix_scan_user(void) {
         draw_static_boxes();
 
         // Draw mark down
-        markDownTetromino = 0;
-        while (check_movement(playerTetrominoSize, playerTetrominoPiece.data, 0, markDownTetromino + 1)) {
+        Tetromino markdownPiece = tetrominos[playerTetromino[0]];
+        markDownTetromino       = 0;
+        while (check_movement(markdownPiece.size, markdownPiece.data, 0, markDownTetromino + 1) && markDownTetromino < V_BOXES + 1) {
             markDownTetromino++;
         }
+
         if (markDownTetromino) {
             // Draw mark down
-            for (uint8_t y = 0; y < playerTetrominoSize; y++) {
-                for (uint8_t x = 0; x < playerTetrominoSize; x++) {
-                    if (playerTetrominoPiece.data[y * playerTetrominoSize + x]) {
+            for (uint8_t y = 0; y < markdownPiece.size; y++) {
+                for (uint8_t x = 0; x < markdownPiece.size; x++) {
+                    if (markdownPiece.data[y * markdownPiece.size + x]) {
                         int xTemp = playerTetromino[2] + x;
                         int yTemp = playerTetromino[3] + y + markDownTetromino;
-                        if (yTemp >= 0) {
+                        if (yTemp >= 0 && yTemp < V_BOXES) {
                             embed_part(boxes[7], xTemp * BOX_SIZE, yTemp * BOX_SIZE, BOX_SIZE, BOX_SIZE);
                         }
                     }
@@ -456,12 +472,12 @@ void matrix_scan_user(void) {
         }
 
         // Draw player tetromino
-        for (uint8_t y = 0; y < playerTetrominoSize; y++) {
-            for (uint8_t x = 0; x < playerTetrominoSize; x++) {
-                if (playerTetrominoPiece.data[y * playerTetrominoSize + x]) {
+        for (uint8_t y = 0; y < playerPiece.size; y++) {
+            for (uint8_t x = 0; x < playerPiece.size; x++) {
+                if (playerPiece.data[y * playerPiece.size + x]) {
                     int xTemp = playerTetromino[2] + x;
                     int yTemp = playerTetromino[3] + y;
-                    if (yTemp >= 0) {
+                    if (yTemp >= 0 && yTemp < V_BOXES) {
                         embed_part(boxes[playerTetromino[1]], xTemp * BOX_SIZE, yTemp * BOX_SIZE, BOX_SIZE, BOX_SIZE);
                     }
                 }
@@ -469,13 +485,13 @@ void matrix_scan_user(void) {
         }
 
         // Draw next tetromino
-        uint8_t nextTetrominoSize = sqrt(nextTetrominoPiece.length);
-        for (uint8_t y = 0; y < nextTetrominoSize; y++) {
-            for (uint8_t x = 0; x < nextTetrominoSize; x++) {
-                if (nextTetrominoPiece.data[y * nextTetrominoSize + x]) {
+        Tetromino nextPiece = tetrominos[nextTetromino[0]];
+        for (uint8_t y = 0; y < nextPiece.size; y++) {
+            for (uint8_t x = 0; x < nextPiece.size; x++) {
+                if (nextPiece.data[y * nextPiece.size + x]) {
                     int xTemp = nextTetromino[2] + x;
                     int yTemp = nextTetromino[3] + y;
-                    if (yTemp >= 0) {
+                    if (yTemp >= 0 && yTemp < V_BOXES) {
                         embed_part(boxes[nextTetromino[1]], xTemp * BOX_SIZE, yTemp * BOX_SIZE, BOX_SIZE, BOX_SIZE);
                     }
                 }
@@ -487,39 +503,14 @@ void matrix_scan_user(void) {
     }
 }
 
-void start_game(void) {
-    clear_screen(IMAGE_WIDTH);
-    clear_boxes();
-    add_next_tetromino();
-    add_player_tetromino();
-    add_next_tetromino();
-    reset_time(timeNextMove);
-    playing = true;
-}
-
-void init_game(void) {
-    qp_rect(display, 0, 0, 127, 127, 0, 0, 0, true);
-    qp_flush(display);
-
-    painter_image_handle_t tetris_image = qp_load_image_mem(gfx_tetris);
-    if (tetris_image != NULL) {
-        qp_drawimage(display, 0, 0, tetris_image);
-    }
-    wait_ms(3000);
-    qp_close_image(tetris_image);
-
-    qp_rect(display, 0, 0, 127, 127, 0, 0, 0, true);
-    qp_flush(display);
-
-    font = qp_load_font_mem(font_freeroad_11);
-
-    start_game();
-}
-
 void keyboard_post_init_user(void) {
     display = qp_st7735_make_spi_device(128, 128, TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN, 4, 0);
     qp_init(display, QP_ROTATION_0);
     qp_set_viewport_offsets(display, 2, 1);
+
+    // Rand numbers seed
+    unsigned int seed = (unsigned int)time(NULL);
+    srand(seed);
 
     // Init game
     init_game();

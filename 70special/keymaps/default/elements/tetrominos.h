@@ -4,6 +4,7 @@
 
 typedef struct {
     uint8_t length;
+    uint8_t size;
     bool *data;
 } Tetromino;
 
