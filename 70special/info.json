@@ -13,14 +13,16 @@
     "bootloader": "rp2040",
     "diode_direction": "COL2ROW",
     "matrix_pins": {
-        "cols": ["GP2"],
-        "rows": ["GP3"]
+        "cols": ["GP0"],
+        "rows": ["GP3", "GP4", "GP9", "GP13"]
     },
-    "debounce": 20,
     "layouts": {
         "LAYOUT_65_all": {
             "layout": [
-                { "matrix": [0, 0], "label":"A", "x":0, "y":0 }
+                { "matrix": [0, 0], "label":"A", "x":0, "y":0 },
+                { "matrix": [1, 0], "label":"B", "x":0, "y":1 },
+                { "matrix": [2, 0], "label":"C", "x":0, "y":2 },
+                { "matrix": [3, 0], "label":"D", "x":0, "y":3 }
             ]
         }
     }
